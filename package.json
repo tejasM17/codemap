@@ -6,13 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "parse": "node scripts/parse.ts",
+    "map-counts": "node scripts/map-counts.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
     "@clerk/nextjs": "^7.9.20",
+    "@dagrejs/dagre": "^3.1.3",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@xyflow/react": "^12.12.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.0",
     "lucide-react": "^1.61.0",

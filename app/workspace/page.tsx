@@ -49,6 +49,14 @@ export default async function WorkspacePage() {
     .select("id, status, started_at, completed_at, created_at, project:projects!analyses_organization_id_project_id_fkey(name, repository_url)")
     .order("created_at", { ascending: false });
 
+  if (error) {
+    console.error("Failed to load workspace analyses", {
+      code: error.code,
+      message: error.message,
+      organizationId: orgId,
+    });
+  }
+
   return (
     <div className="workspace-content">
       <header className="analysis-heading">
@@ -84,7 +92,7 @@ export default async function WorkspacePage() {
       ) : (
         <Empty className="analysis-empty-state">
           <EmptyMedia variant="icon"><span aria-hidden="true">⌁</span></EmptyMedia>
-          <EmptyHeader><span className="eyebrow">NO ANALYSES YET</span><EmptyTitle>Your team’s maps will show up here.</EmptyTitle><EmptyDescription>When someone runs an analysis, its repository and current state will be available to everyone in this organization.</EmptyDescription></EmptyHeader>
+          <EmptyHeader><span className="eyebrow">NO ANALYSES FOUND</span><EmptyTitle>No analyses for {organizationName}.</EmptyTitle><EmptyDescription>Analyses are private to the selected team. If you expected existing runs here, switch to the team that owns them from the menu above.</EmptyDescription></EmptyHeader>
         </Empty>
       )}
       <span className="sr-only" data-organization-id={orgId}>Active organization loaded</span>
