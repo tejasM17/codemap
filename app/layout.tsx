@@ -6,8 +6,9 @@ import "@xyflow/react/dist/style.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cartograph · See how your code fits together",
+  title: "CodeMap · See how your code fits together",
   description: "A clear map of your codebase, built for your team.",
+  icons: { icon: "/icon.svg" },
 };
 
 const requiredEnvironment = [
@@ -40,7 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('cartograph-theme');if(t==='light'||t==='dark'||t==='system')document.documentElement.dataset.theme=t}catch{}`,
+            __html: `try{var t=localStorage.getItem('codemap-theme');if(t==='light'||t==='dark'||t==='system')document.documentElement.dataset.theme=t}catch{}`,
           }}
         />
         {missingEnvironment.length > 0 ? <SetupRequired missing={missingEnvironment} /> : (

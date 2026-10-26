@@ -7,11 +7,11 @@ export function AuthFrame({ children, mode }: { children: ReactNode; mode: "sign
   return (
     <main className="auth-page">
       <header className="auth-topbar">
-        <Link href="/" className="brand-lockup"><BrandMark /><span>cartograph</span></Link>
+        <Link href="/" className="brand-lockup"><BrandMark /><span>CodeMap</span></Link>
         <div className="auth-topbar__actions"><span className="quiet-label">A clearer view of your code</span><ThemeControl /></div>
       </header>
       <div className="auth-layout">
-        <section className="auth-story" aria-label="About Cartograph">
+        <section className="auth-story" aria-label="About CodeMap">
           <span className="eyebrow"><span className="status-dot" /> YOUR CODEBASE, IN CONTEXT</span>
           <h1>See the shape<br />of your software.</h1>
           <p>Understand what a file does, what depends on it, and where a change will travel.</p>
@@ -37,12 +37,12 @@ export function AuthFrame({ children, mode }: { children: ReactNode; mode: "sign
           </div>
           {children}
           <div className="auth-switch">
-            {mode === "sign-in" ? <>New to Cartograph? <Link href="/sign-up">Create an account <span aria-hidden="true">↗</span></Link></> : <>Already have an account? <Link href="/sign-in">Sign in <span aria-hidden="true">↗</span></Link></>}
+            {mode === "sign-in" ? <>New to CodeMap? <Link href="/sign-up">Create an account <span aria-hidden="true">↗</span></Link></> : <>Already have an account? <Link href="/sign-in">Sign in <span aria-hidden="true">↗</span></Link></>}
           </div>
           <p className="auth-legal">By continuing, you agree to keep your team’s code and workspace private.</p>
         </section>
       </div>
-      <footer className="auth-footer"><span>© 2026 Cartograph</span><span>Made for the moments you need to understand a codebase.</span></footer>
+      <footer className="auth-footer"><span>© 2026 CodeMap</span><span>Made for the moments you need to understand a codebase.</span></footer>
     </main>
   );
 }

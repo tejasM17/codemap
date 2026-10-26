@@ -1,12 +1,13 @@
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 
 export function SetupRequired({ missing }: { missing: string[] }) {
   return (
     <main className="setup-page">
       <div className="setup-card">
-        <Link className="brand-lockup" href="/" aria-label="Cartograph home">
-          <span className="brand-mark" aria-hidden="true"><span /><span /><span /><span /></span>
-          <span>cartograph</span>
+        <Link className="brand-lockup" href="/" aria-label="CodeMap home">
+          <BrandMark />
+          <span>CodeMap</span>
         </Link>
         <span className="eyebrow">LOCAL CONFIGURATION</span>
         <h1>Connect the services this workspace needs.</h1>

@@ -9,7 +9,7 @@ This phase gives each signed in person a place to work, lets them switch organiz
 
 ## Context
 
-Cartograph is an organization based product. Repository analyses will belong to an organization, so organization identity must be available before the application adds data or access policies. Sign in, organization membership, and the database token bridge are therefore prerequisites for later phases.
+CodeMap is an organization based product. Repository analyses will belong to an organization, so organization identity must be available before the application adds data or access policies. Sign in, organization membership, and the database token bridge are therefore prerequisites for later phases.
 
 The project direction names Clerk for identity and Supabase for Postgres. The current app has the Next.js starter page and Supabase packages, but no Clerk dependency, sign in route, or authentication setup. The earlier phase brief described sign in as scaffolded; implementation must first establish that foundation as part of this phase.
 
@@ -18,7 +18,7 @@ The phase also establishes the persistent visual shell and theme preference that
 ## Requirements
 
 **User stories**:
-- As a developer, I want to sign in and land in an organization so I can start using Cartograph without setting up a workspace first.
+- As a developer, I want to sign in and land in an organization so I can start using CodeMap without setting up a workspace first.
 - As a team member, I want to invite a teammate and switch organizations so our work stays with the right team.
 - As a signed in user, I want the organization available during server rendering so later server rendered views and database requests use the right organization immediately.
 - As a user, I want a persistent theme preference and a stable application shell so the product feels consistent between visits.

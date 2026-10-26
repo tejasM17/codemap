@@ -86,14 +86,18 @@ function fileHandleId(direction: "source" | "target", path: string): string {
 
 function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
   const { module, isOpen, isSelected, isDimmed, selectedFile, selectedModule, relatedFiles, fileLabels } = data;
-  const visibleFiles = module.files.slice(0, GRAPH_MAX_VISIBLE_FILES);
+  const moduleFiles = module.files;
 
   return (
-    <section className={`canvas-module${isOpen ? " is-open" : ""}${isSelected ? " is-selected" : ""}${isDimmed ? " is-dimmed" : ""}`} aria-label={`${module.label}, ${module.files.length} files`}>
+    <section
+      className={`canvas-module${isOpen ? " is-open" : ""}${isSelected ? " is-selected" : ""}${isDimmed ? " is-dimmed" : ""}`}
+      aria-label={`${module.label}, ${module.files.length} files`}
+      onClick={!isOpen ? (event) => { event.stopPropagation(); data.onOpen(module.id); } : undefined}
+    >
       <Handle id="module-target" type="target" position={Position.Left} className="canvas-handle canvas-handle--module" />
       <Handle id="module-source" type="source" position={Position.Right} className="canvas-handle canvas-handle--module" />
       {!isOpen ? (
-        <button className="canvas-module__folded nodrag nopan" type="button" onClick={(event) => { event.stopPropagation(); data.onOpen(module.id); }} aria-expanded="false">
+        <button className="canvas-module__folded nodrag nopan" type="button" aria-expanded="false">
           <span className="canvas-module__name">{module.label}</span>
           <span className="canvas-module__summary">{module.files.length} files · in {module.fanIn} · out {module.fanOut}</span>
         </button>
@@ -103,8 +107,8 @@ function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
             <span className="canvas-module__name">{module.label}</span>
             <span className="canvas-module__summary">{module.files.length} files · in {module.fanIn} · out {module.fanOut}</span>
           </button>
-          <ul className="canvas-module__files" aria-label={`${module.label} files`}>
-            {visibleFiles.map((file) => {
+          <ul className={`canvas-module__files nowheel${module.files.length > GRAPH_MAX_VISIBLE_FILES ? " is-scrollable" : ""}`} aria-label={`${module.label} files`}>
+            {moduleFiles.map((file) => {
               const isFileSelected = selectedFile === file.path;
               const isFileRelated = !selectedFile && !selectedModule || isFileSelected || selectedModule === module.id || relatedFiles.includes(file.path);
               return (
@@ -119,15 +123,15 @@ function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
                   >
                     <span className="canvas-file-dot" aria-hidden="true" />
                     <span className="canvas-file-name">{fileLabels[file.path] ?? file.path}</span>
-                    <span className="canvas-file-count">{file.fanIn}</span>
+                    <span className="canvas-file-count" aria-label={`${file.fanIn} incoming, ${file.fanOut} outgoing dependencies`} title={`${file.fanIn} incoming · ${file.fanOut} outgoing`}>
+                      <span aria-hidden="true">←{file.fanIn}</span>
+                      <span aria-hidden="true">{file.fanOut}→</span>
+                    </span>
                   </button>
                 </li>
               );
             })}
           </ul>
-          {module.files.length > GRAPH_MAX_VISIBLE_FILES ? (
-            <div className="canvas-module__overflow">+ {module.files.length - GRAPH_MAX_VISIBLE_FILES} more files</div>
-          ) : null}
         </>
       )}
     </section>
@@ -183,6 +187,7 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
       position: { x: positioned.x, y: positioned.y },
       width: positioned.width,
       height: positioned.height,
+      zIndex: isOpen ? 10 : undefined,
       style: { width: positioned.width, height: positioned.height },
       data: {
         module: positioned,
@@ -326,8 +331,8 @@ export function CanvasPreviewShell({ analysis }: { analysis: ParseResult }) {
   return (
     <div className="canvas-preview">
       <header className="canvas-topbar">
-        <Link className="canvas-brand" href="/preview" aria-label="Cartograph preview">
-          <span>cartograph</span>
+        <Link className="canvas-brand" href="/preview" aria-label="CodeMap preview">
+          <span>CodeMap</span>
           <span className="canvas-topbar__slash" aria-hidden="true">/</span>
           <BrandMark />
         </Link>

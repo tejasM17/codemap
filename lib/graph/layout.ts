@@ -15,16 +15,19 @@ export interface GraphLayout {
   height: number;
 }
 
-const MAX_VISIBLE_FILES = 14;
-const HEADER_HEIGHT = 62;
-const ROW_HEIGHT = 22;
+const MAX_VISIBLE_FILES = 12;
+const HEADER_HEIGHT = 68;
+const ROW_HEIGHT = 26;
 
 function dimensions(node: ModuleNode, openId: string | null): Pick<PositionedNode, "width" | "height" | "visibleFiles"> {
-  const width = Math.min(260, Math.max(132, node.label.length * 8 + 34));
-  const visibleFiles = node.id === openId ? Math.min(node.files.length, MAX_VISIBLE_FILES) : 0;
-  const overflowHeight = node.id === openId && node.files.length > MAX_VISIBLE_FILES ? 28 : 8;
+  const isOpen = node.id === openId;
+  const width = isOpen
+    ? Math.min(340, Math.max(220, node.label.length * 8 + 44))
+    : Math.min(260, Math.max(132, node.label.length * 8 + 34));
+  const visibleFiles = node.id === openId && node.files.length <= MAX_VISIBLE_FILES ? node.files.length : 0;
+  const overflowHeight = 8;
   const height = node.id === openId
-    ? HEADER_HEIGHT + visibleFiles * ROW_HEIGHT + overflowHeight
+    ? HEADER_HEIGHT + Math.min(node.files.length, MAX_VISIBLE_FILES) * ROW_HEIGHT + overflowHeight + 2
     : 42 + Math.sqrt(node.fanIn) * 12;
   return { width, height, visibleFiles };
 }

@@ -9,7 +9,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="workspace-app">
       <header className="workspace-topbar">
-        <Link className="brand-lockup" href="/workspace"><BrandMark /><span>cartograph</span></Link>
+        <Link className="brand-lockup" href="/workspace"><BrandMark /><span>CodeMap</span></Link>
         <span className="workspace-topbar__slash" aria-hidden="true">/</span>
         <OrganizationSwitcher
           afterSelectOrganizationUrl="/workspace"

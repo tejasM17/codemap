@@ -14,7 +14,7 @@ const listeners = new Set<() => void>();
 
 function readTheme(): Theme {
   try {
-    const savedTheme = localStorage.getItem("cartograph-theme");
+    const savedTheme = localStorage.getItem("codemap-theme");
     return savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
   } catch {
     return "system";
@@ -36,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setTheme = useCallback((nextTheme: Theme) => {
     document.documentElement.dataset.theme = nextTheme;
     try {
-      localStorage.setItem("cartograph-theme", nextTheme);
+      localStorage.setItem("codemap-theme", nextTheme);
     } catch {
       // Keep the theme for this visit when browser storage is unavailable.
     }
