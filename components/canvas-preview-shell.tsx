@@ -24,6 +24,7 @@ import type { DependencyEdge, ParseResult, ParsedFile } from "@/lib/parser/types
 const extensionOrder = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
 
 type Selection = { kind: "module"; id: string } | { kind: "file"; path: string };
+type Hover = { kind: "module"; id: string } | { kind: "file"; path: string } | null;
 type EdgeTone = "incoming" | "outgoing" | "quiet";
 
 interface ModuleNodeData extends Record<string, unknown> {
@@ -33,11 +34,13 @@ interface ModuleNodeData extends Record<string, unknown> {
   isDimmed: boolean;
   selectedFile: string | null;
   selectedModule: string | null;
+  hoveredFile: string | null;
   relatedFiles: string[];
   fileLabels: Record<string, string>;
   onOpen: (id: string) => void;
   onClose: () => void;
   onSelectFile: (path: string) => void;
+  onHover: (hover: Hover) => void;
 }
 
 interface DependencyEdgeData extends Record<string, unknown> {
@@ -85,14 +88,22 @@ function fileHandleId(direction: "source" | "target", path: string): string {
 }
 
 function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
-  const { module, isOpen, isSelected, isDimmed, selectedFile, selectedModule, relatedFiles, fileLabels } = data;
+  const { module, isOpen, isSelected, isDimmed, selectedFile, selectedModule, hoveredFile, relatedFiles, fileLabels } = data;
   const moduleFiles = module.files;
+
+  useEffect(() => {
+    if (!isOpen || !selectedFile) return;
+    const row = document.querySelector<HTMLElement>(`[data-file-path="${CSS.escape(selectedFile)}"]`);
+    row?.scrollIntoView({ block: "nearest" });
+  }, [isOpen, selectedFile]);
 
   return (
     <section
       className={`canvas-module${isOpen ? " is-open" : ""}${isSelected ? " is-selected" : ""}${isDimmed ? " is-dimmed" : ""}`}
       aria-label={`${module.label}, ${module.files.length} files`}
       onClick={!isOpen ? (event) => { event.stopPropagation(); data.onOpen(module.id); } : undefined}
+      onMouseEnter={() => data.onHover({ kind: "module", id: module.id })}
+      onMouseLeave={() => data.onHover(null)}
     >
       <Handle id="module-target" type="target" position={Position.Left} className="canvas-handle canvas-handle--module" />
       <Handle id="module-source" type="source" position={Position.Right} className="canvas-handle canvas-handle--module" />
@@ -117,9 +128,12 @@ function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
                   <Handle id={fileHandleId("source", file.path)} type="source" position={Position.Right} className="canvas-handle canvas-handle--row" />
                   <button
                     type="button"
-                    className={`canvas-module__file nodrag nopan${isFileSelected ? " is-selected" : ""}${isFileRelated ? "" : " is-dimmed"}`}
+                    className={`canvas-module__file nodrag nopan${isFileSelected ? " is-selected" : ""}${hoveredFile === file.path ? " is-hovered" : ""}${isFileRelated ? "" : " is-dimmed"}`}
                     onClick={(event) => { event.stopPropagation(); data.onSelectFile(file.path); }}
                     title={file.path}
+                    data-file-path={file.path}
+                    onMouseEnter={() => data.onHover({ kind: "file", path: file.path })}
+                    onMouseLeave={() => data.onHover(null)}
                   >
                     <span className="canvas-file-dot" aria-hidden="true" />
                     <span className="canvas-file-name">{fileLabels[file.path] ?? file.path}</span>
@@ -144,6 +158,8 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
   const graph = useMemo(() => foldModules(analysis), [analysis]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [hover, setHover] = useState<Hover>(null);
+  const [tab, setTab] = useState<"structure" | "explanation">("structure");
   const flow = useReactFlow<CanvasNode, CanvasEdge>();
   const nodesInitialized = useNodesInitialized();
   const lastFittedOpenId = useRef<string | null>(null);
@@ -180,7 +196,8 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
   const fileLabels = useMemo(() => shortFileLabels(openId ? graph.nodes.find((node) => node.id === openId)?.files ?? [] : []), [graph.nodes, openId]);
   const nodes = useMemo<CanvasNode[]>(() => layout.nodes.map((positioned) => {
     const isOpen = positioned.id === openId;
-    const isDimmed = selection !== null && !activeNodes.has(positioned.id);
+    const hoverTouchesModule = hover?.kind === "module" ? hover.id === positioned.id : hover?.kind === "file" ? positioned.files.some((file) => file.path === hover.path) : true;
+    const isDimmed = selection !== null && !activeNodes.has(positioned.id) || hover !== null && !hoverTouchesModule;
     return {
       id: positioned.id,
       type: "module",
@@ -196,8 +213,10 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
         isDimmed,
         selectedFile: selection?.kind === "file" ? selection.path : null,
         selectedModule: selection?.kind === "module" ? selection.id : null,
+        hoveredFile: hover?.kind === "file" ? hover.path : null,
         relatedFiles: [...relatedFiles],
         fileLabels,
+        onHover: setHover,
         onOpen: (id) => {
           setOpenId(id);
           setSelection({ kind: "module", id });
@@ -209,12 +228,13 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
       selectable: false,
       focusable: true,
     };
-  }), [activeNodes, fileLabels, layout.nodes, openId, relatedFiles, selection]);
+  }), [activeNodes, fileLabels, hover, layout.nodes, openId, relatedFiles, selection]);
 
   const edges = useMemo<CanvasEdge[]>(() => graph.edges.flatMap((moduleEdge) => moduleEdge.files.flatMap((file) => {
     if (moduleEdge.from === moduleEdge.to) return [];
     const tone = fileEdgeTone(file, selection, filesByModule);
-    const dimmed = selection !== null && tone === "quiet";
+    const hoverTouchesEdge = hover?.kind === "file" ? file.from === hover.path || file.to === hover.path : hover?.kind === "module" ? filesByModule.get(hover.id)?.has(file.from) || filesByModule.get(hover.id)?.has(file.to) : true;
+    const dimmed = selection !== null && tone === "quiet" || hover !== null && !hoverTouchesEdge;
     const sourceNode = layout.nodes.find((node) => node.id === moduleEdge.from);
     const targetNode = layout.nodes.find((node) => node.id === moduleEdge.to);
     if (!sourceNode || !targetNode) return [];
@@ -237,7 +257,7 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
       selectable: false,
       focusable: false,
     }];
-  })), [filesByModule, graph.edges, layout.nodes, openId, selection]);
+  })), [filesByModule, graph.edges, hover, layout.nodes, openId, selection]);
 
   const onNodeClick: NodeMouseHandler<CanvasNode> = (_event, node) => {
     if (!node.data.isOpen) {
@@ -272,11 +292,40 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
   const resolvedRatio = repositoryImports > 0 ? Math.floor((analysis.coverage.internal / repositoryImports) * 100) : 100;
   const unresolvedImports = analysis.coverage.imports.filter((item) => item.status === "failed");
   const isGraphPartial = unresolvedImports.length > 0 || analysis.coverage.excluded > 0;
+  const fileByPath = new Map(analysis.files.map((file) => [file.path, file]));
+  const dependentsByPath = new Map<string, string[]>();
+  const dependenciesByPath = new Map<string, string[]>();
+  for (const edge of analysis.edges) {
+    const dependents = dependentsByPath.get(edge.to) ?? [];
+    if (!dependents.includes(edge.from)) dependents.push(edge.from);
+    dependentsByPath.set(edge.to, dependents);
+    const dependencies = dependenciesByPath.get(edge.from) ?? [];
+    if (!dependencies.includes(edge.to)) dependencies.push(edge.to);
+    dependenciesByPath.set(edge.from, dependencies);
+  }
+  const repositoryName = analysis.root.split(/[\\/]/).filter(Boolean).at(-1) ?? analysis.root;
+  const rankedDependents = [...dependentsByPath].sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]));
+  const mostDependedOn = rankedDependents.slice(0, 10);
+  const allStartingFiles = analysis.files.filter((file) => !(dependentsByPath.get(file.path)?.length));
+  const startingFiles = allStartingFiles.slice(0, 10);
+  const folder = selection?.kind === "module" ? graph.nodes.find((node) => node.id === selection.id) : undefined;
+  const selectedFile = selection?.kind === "file" ? fileByPath.get(selection.path) : undefined;
+  const selectedFolder = selectedFile ? selectedFile.path.includes("/") ? selectedFile.path.slice(0, selectedFile.path.lastIndexOf("/")) : "." : "";
+  const hoveredPath = hover?.kind === "file" ? hover.path : undefined;
+  const dependencyLabel = (from: string, to: string) => {
+    const edge = analysis.edges.find((item) => item.from === from && item.to === to);
+    if (!edge) return null;
+    if (edge.isTypeOnly) return "type";
+    return edge.kind === "import" ? null : edge.kind;
+  };
+  const paneFile = (path: string) => (
+    <button key={path} type="button" className={`detail-path${hoveredPath === path ? " is-hovered" : ""}`} onClick={() => { const owner = graph.nodes.find((node) => node.files.some((file) => file.path === path)); if (owner) setOpenId(owner.id); setSelection({ kind: "file", path }); }} onMouseEnter={() => setHover({ kind: "file", path })} onMouseLeave={() => setHover(null)}><span>{path.slice(0, Math.max(0, path.lastIndexOf("/") + 1))}</span><strong>{path.slice(path.lastIndexOf("/") + 1)}</strong></button>
+  );
 
   return (
     <>
       <aside className="canvas-rail" aria-label="File categories by extension">
-        <h1>Files by extension</h1>
+        <h1>Categories <span>· {analysis.filesParsed} files</span></h1>
         <ul>
           {extensions.map((extension, index) => (
             <li key={extension}>
@@ -314,7 +363,31 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
           onPaneClick={() => setSelection(null)}
         />
       </main>
-      <aside className="canvas-details" aria-label="Selected file details" />
+      <aside className="canvas-details" aria-label="Repository and selection details">
+        {selectedFile ? <div className="details-file-head"><span>file</span><h2>{selectedFile.path}</h2></div> : null}
+        <div className="details-tabs" role="tablist" aria-label="Detail pane">
+          <button type="button" role="tab" aria-selected={tab === "structure"} className={tab === "structure" ? "is-active" : ""} onClick={() => setTab("structure")}>Structure</button>
+          <button type="button" role="tab" aria-selected={tab === "explanation"} className={tab === "explanation" ? "is-active" : ""} onClick={() => setTab("explanation")}>Explanation</button>
+        </div>
+        {hover ? <div className="details-hover" aria-live="polite">Map focus · <code>{hover.kind === "file" ? hover.path : graph.nodes.find((node) => node.id === hover.id)?.label}</code></div> : null}
+        <div className="details-scroll" role="tabpanel">
+          {tab === "explanation" ? <p className="details-empty">No explanation available yet.</p> : folder ? <>
+            <h2>{folder.label}</h2><p className="details-kicker">Folder · {folder.files.length} files</p>
+            <h3>Files inside</h3><ul className="details-kind-list">{[...new Set(folder.files.map((file) => file.extension))].sort().map((extension) => <li key={extension}><span>{extension}</span><span>{folder.files.filter((file) => file.extension === extension).length}</span></li>)}</ul>
+            <h3>Paths</h3><ul className="details-path-list">{folder.files.map((file) => <li key={file.path}>{paneFile(file.path)}</li>)}</ul>
+          </> : selectedFile ? <>
+            <dl className="details-file-facts"><div><dt>Kind</dt><dd><i className={`canvas-role-swatch canvas-role-swatch--tone-${Math.max(0, extensions.indexOf(selectedFile.extension)) % 5}`} aria-hidden="true" />{selectedFile.extension}</dd></div><div><dt>Folder</dt><dd className="details-fact-path">{selectedFolder}</dd></div><div><dt>Length</dt><dd>{selectedFile.lines} lines</dd></div><div><dt>Depends on</dt><dd><strong className="details-out-count">{(dependenciesByPath.get(selectedFile.path) ?? []).length}</strong> {(dependenciesByPath.get(selectedFile.path) ?? []).length === 1 ? "file" : "files"}</dd></div><div><dt>Depended on by</dt><dd><strong className="details-in-count">{(dependentsByPath.get(selectedFile.path) ?? []).length}</strong> {(dependentsByPath.get(selectedFile.path) ?? []).length === 1 ? "file" : "files"}</dd></div></dl>
+            <section className="details-file-section"><h3><span>Imports</span><strong className="details-out-count">{(dependenciesByPath.get(selectedFile.path) ?? []).length}→</strong></h3><ul className="details-path-list">{(dependenciesByPath.get(selectedFile.path) ?? []).map((path) => { const label = dependencyLabel(selectedFile.path, path); return <li key={path}>{paneFile(path)}{label ? <small>{label}</small> : null}</li>; })}</ul></section>
+            <section className="details-file-section"><h3><span>Imported by</span><strong className="details-in-count">←{(dependentsByPath.get(selectedFile.path) ?? []).length}</strong></h3><ul className="details-path-list">{(dependentsByPath.get(selectedFile.path) ?? []).map((path) => { const label = dependencyLabel(path, selectedFile.path); return <li key={path}>{paneFile(path)}{label ? <small>{label}</small> : null}</li>; })}</ul></section>
+          </> : <>
+            <div className="details-repository-head"><h2>{repositoryName}</h2><p>Framework <strong>none detected</strong></p></div>
+            <div className="details-metrics"><div><span>Files</span><strong>{analysis.filesParsed}</strong><small>{analysis.filesSkipped} skipped</small></div><div><span>Imports</span><strong>{analysis.coverage.internal + analysis.coverage.failed}</strong><small>{analysis.coverage.failed} unresolved</small></div><div><span>Routes</span><strong>—</strong><small>no adapter</small></div></div>
+            <section className="details-ranking"><h3><span>Most depended on</span><small>by files importing it</small></h3><ul className="details-ranked-list">{mostDependedOn.map(([path, dependents]) => <li key={path}><span>{paneFile(path)}</span><strong className="details-in-count">←{dependents.length}</strong></li>)}</ul>{rankedDependents.length > mostDependedOn.length ? <p className="details-more">{rankedDependents.length - mostDependedOn.length} more not listed</p> : null}</section>
+            <section className="details-ranking"><h3><span>Imported by nothing</span><small>where reading starts</small></h3><ul className="details-ranked-list">{startingFiles.map((file) => <li key={file.path}><span>{paneFile(file.path)}</span><strong className="details-out-count">{(dependenciesByPath.get(file.path) ?? []).length}→</strong></li>)}</ul>{allStartingFiles.length > startingFiles.length ? <p className="details-more">{allStartingFiles.length - startingFiles.length} more not listed</p> : null}</section>
+            <section className="details-convention"><h3>Unidentified by convention <strong>{analysis.filesParsed}</strong></h3><p>No framework adapter applied, so no file was matched to a role.</p></section>
+          </>}
+        </div>
+      </aside>
     </>
   );
 }
