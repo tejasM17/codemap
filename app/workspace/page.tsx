@@ -1,6 +1,29 @@
-import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+
+export const instant = false;
+
+const statusLabels: Record<string, string> = {
+  queued: "Queued",
+  running: "In progress",
+  completed: "Complete",
+  failed: "Failed",
+};
+
+function formatDate(value: string) {
+  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31_536_000], ["month", 2_592_000], ["day", 86_400],
+    ["hour", 3_600], ["minute", 60], ["second", 1],
+  ];
+  const formatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  const [unit, duration] = units.find(([, size]) => Math.abs(seconds) >= size) ?? units[units.length - 1];
+  return formatter.format(Math.round(seconds / duration), unit);
+}
 
 export default async function WorkspacePage() {
   const { userId, orgId, orgSlug, sessionClaims } = await auth();
@@ -9,14 +32,9 @@ export default async function WorkspacePage() {
   if (!orgId) {
     return (
       <div className="workspace-content">
-        <div className="breadcrumb"><span>Workspace</span><span>/</span><strong>Organization</strong></div>
-        <section className="welcome-panel organization-missing">
-          <div className="welcome-copy">
-            <span className="eyebrow"><span className="status-dot" /> ORGANIZATION NEEDED</span>
-            <h2>This account has no active organization.</h2>
-            <p>Cartograph keeps team work inside an organization. Choose one from the workspace menu, or ask your administrator to add you.</p>
-          </div>
-        </section>
+        <Empty className="analysis-empty-state">
+          <EmptyHeader><span className="eyebrow">ORGANIZATION NEEDED</span><EmptyTitle>Choose a team to see its analyses.</EmptyTitle><EmptyDescription>Use the organization menu to switch to a team workspace.</EmptyDescription></EmptyHeader>
+        </Empty>
       </div>
     );
   }
@@ -25,49 +43,50 @@ export default async function WorkspacePage() {
     ? sessionClaims.org_name
     : orgSlug || "your organization";
 
-  // Create the request scoped client now so later server rendered data reads
-  // inherit the verified Clerk session token and active organization claim.
-  await createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
+  const { data: analyses, error } = await supabase
+    .from("analyses")
+    .select("id, status, started_at, completed_at, created_at, project:projects!analyses_organization_id_project_id_fkey(name, repository_url)")
+    .order("created_at", { ascending: false });
 
   return (
     <div className="workspace-content">
-      <div className="workspace-heading-row">
-        <div>
-          <div className="breadcrumb"><span>Workspace</span><span>/</span><strong>Overview</strong></div>
-          <p className="eyebrow">YOUR TEAM, IN CONTEXT</p>
-          <h1>Good to have you here.</h1>
-          <p className="workspace-subtitle">A shared map for <strong>{organizationName}</strong> starts here.</p>
+      <header className="analysis-heading">
+        <div className="analysis-title-line">
+          <h1>{organizationName}</h1>
+          <span className="analysis-count">{analyses?.length ?? 0} analyses</span>
         </div>
-        <Link href="/workspace/team" className="button button--primary"><span aria-hidden="true">＋</span> Invite your team</Link>
-      </div>
+      </header>
 
-      <section className="welcome-panel">
-        <div className="welcome-copy">
-          <span className="eyebrow"><span className="status-dot" /> WORKSPACE READY</span>
-          <h2>Make the invisible structure visible.</h2>
-          <p>When your team maps a repository, folders, files, and their connections will come together here. Start by inviting the people who know the code.</p>
-          <Link href="/workspace/team" className="text-link">Set up your team <span aria-hidden="true">→</span></Link>
-        </div>
-        <div className="welcome-illustration" aria-hidden="true">
-          <div className="orbit orbit--outer" /><div className="orbit orbit--inner" />
-          <div className="orbit-core"><span className="brand-mark"><span /><span /><span /><span /></span></div>
-          <div className="orbit-node orbit-node--a">ƒ</div><div className="orbit-node orbit-node--b">◇</div><div className="orbit-node orbit-node--c">⌘</div><div className="orbit-node orbit-node--d">↗</div>
-          <span className="orbit-label orbit-label--a">FILES</span><span className="orbit-label orbit-label--b">IMPORTS</span>
-        </div>
-      </section>
-
-      <div className="section-heading"><div><span className="eyebrow">A GOOD PLACE TO BEGIN</span><h2>Bring your team in</h2></div><span className="section-index">01 / 02</span></div>
-      <div className="setup-grid">
-        <Link href="/workspace/team" className="setup-tile">
-          <span className="tile-icon tile-icon--blue">⌁</span><span className="tile-step">01</span>
-          <h3>Invite a teammate</h3><p>Share a workspace with the people building alongside you.</p><span className="tile-arrow" aria-hidden="true">↗</span>
-        </Link>
-        <div className="setup-tile setup-tile--quiet">
-          <span className="tile-icon tile-icon--amber">⌘</span><span className="tile-step">02</span>
-          <h3>Connect a repository</h3><p>Your public JavaScript and TypeScript repositories will be ready to map in the next step.</p><span className="tile-status">COMING NEXT</span>
-        </div>
-      </div>
-      <div className="workspace-footer-note"><span className="footer-spark">✳</span><span>Every line on a Cartograph map comes from the code itself.</span><Link href="/workspace/team">Manage your workspace <span aria-hidden="true">→</span></Link></div>
+      {error ? (
+        <Alert variant="destructive" className="inline-alert"><AlertDescription>Analyses could not be loaded. Check the Supabase connection and organization token configuration.</AlertDescription></Alert>
+      ) : analyses?.length ? (
+        <section className="analysis-list" aria-label="Repository analyses">
+          <Table className="analysis-table">
+            <TableHeader><TableRow><TableHead>Repository</TableHead><TableHead>State</TableHead><TableHead>Commit</TableHead><TableHead>Started</TableHead><TableHead>Finished</TableHead></TableRow></TableHeader>
+            <TableBody>
+            {analyses.map((analysis) => {
+              const project = Array.isArray(analysis.project) ? analysis.project[0] : analysis.project;
+              const status = statusLabels[analysis.status] ?? analysis.status;
+              return (
+                <TableRow className="analysis-row" key={analysis.id}>
+                  <TableCell className="analysis-repository"><strong>{project?.repository_url?.replace(/^https?:\/\/(www\.)?github\.com\//, "") ?? project?.name ?? "Repository"}</strong></TableCell>
+                  <TableCell><Badge className={`analysis-badge analysis-badge--${analysis.status}`} variant="outline"><span aria-hidden="true" />{status.toLowerCase()}</Badge></TableCell>
+                  <TableCell className="analysis-commit">—</TableCell>
+                  <TableCell className="analysis-date"><time dateTime={analysis.started_at ?? analysis.created_at}>{formatDate(analysis.started_at ?? analysis.created_at)}</time></TableCell>
+                  <TableCell className="analysis-date">{analysis.completed_at ? <time dateTime={analysis.completed_at}>{formatDate(analysis.completed_at)}</time> : "—"}</TableCell>
+                </TableRow>
+              );
+            })}
+            </TableBody>
+          </Table>
+        </section>
+      ) : (
+        <Empty className="analysis-empty-state">
+          <EmptyMedia variant="icon"><span aria-hidden="true">⌁</span></EmptyMedia>
+          <EmptyHeader><span className="eyebrow">NO ANALYSES YET</span><EmptyTitle>Your team’s maps will show up here.</EmptyTitle><EmptyDescription>When someone runs an analysis, its repository and current state will be available to everyone in this organization.</EmptyDescription></EmptyHeader>
+        </Empty>
+      )}
       <span className="sr-only" data-organization-id={orgId}>Active organization loaded</span>
     </div>
   );

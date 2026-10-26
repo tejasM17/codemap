@@ -1,23 +1,23 @@
 "use client";
 
 import { useTheme, type Theme } from "@/components/theme-provider";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export function ThemeControl() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <label className="theme-control">
-      <span className="theme-control__icon" aria-hidden="true">◐</span>
-      <span className="sr-only">Color theme</span>
-      <select
-        aria-label="Color theme"
-        value={theme}
-        onChange={(event) => setTheme(event.target.value as Theme)}
-      >
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </label>
+    <ToggleGroup
+      className="theme-toggle"
+      aria-label="Color theme"
+      value={[theme]}
+      onValueChange={(value) => { if (value[0]) setTheme(value[0] as Theme); }}
+      variant="outline"
+      spacing={0}
+    >
+      <ToggleGroupItem value="system">System</ToggleGroupItem>
+      <ToggleGroupItem value="light">Light</ToggleGroupItem>
+      <ToggleGroupItem value="dark">Dark</ToggleGroupItem>
+    </ToggleGroup>
   );
 }
