@@ -10,6 +10,7 @@ export interface ParsedFile {
   hash: string;
   fanIn: number;
   fanOut: number;
+  entryPointReason: string | null;
 }
 
 export interface DependencyEdge {
@@ -34,7 +35,7 @@ export interface SkippedFile {
 }
 
 export interface ParseResult {
-  schemaVersion: 1;
+  schemaVersion: 2;
   root: string;
   filesFound: number;
   filesParsed: number;
@@ -56,4 +57,5 @@ export interface ParserAdapter {
   name: string;
   detect(root: string): boolean;
   excludeDirectories(root: string): string[];
+  entryPoint(path: string): string | null;
 }

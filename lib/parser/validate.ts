@@ -5,7 +5,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function validateParseResult(value: unknown): value is ParseResult {
-  if (!isRecord(value) || value.schemaVersion !== 1) return false;
+  if (!isRecord(value) || value.schemaVersion !== 2) return false;
   if (
     typeof value.root !== "string" ||
     typeof value.filesFound !== "number" ||
@@ -35,7 +35,8 @@ export function validateParseResult(value: unknown): value is ParseResult {
     typeof file.lines === "number" &&
     typeof file.hash === "string" &&
     typeof file.fanIn === "number" &&
-    typeof file.fanOut === "number"
+    typeof file.fanOut === "number" &&
+    (file.entryPointReason === null || typeof file.entryPointReason === "string")
   ) && value.edges.every((edge) =>
     isRecord(edge) &&
     typeof edge.from === "string" &&

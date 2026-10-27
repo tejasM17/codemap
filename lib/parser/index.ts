@@ -196,6 +196,7 @@ export async function parseRepository(directory: string, adapter: ParserAdapter 
       hash: createHash("sha256").update(content).digest("hex"),
       fanIn: 0,
       fanOut: 0,
+      entryPointReason: adapter.entryPoint(path),
     });
   }
 
@@ -228,7 +229,7 @@ export async function parseRepository(directory: string, adapter: ParserAdapter 
   for (const entry of coverageImports) counts[entry.status] += 1;
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     root,
     filesFound: discovered.length,
     filesParsed: parsedFiles.length,
