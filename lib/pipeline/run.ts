@@ -60,6 +60,7 @@ async function storeParseResult(supabase: SupabaseClient, organizationId: string
       path: file.path,
       language: file.extension.replace(/^\./, ""),
       content_hash: file.hash,
+      role: file.role,
       module: file.module,
       extension: file.extension,
       lines: file.lines,
@@ -94,6 +95,8 @@ async function storeParseResult(supabase: SupabaseClient, organizationId: string
     coverage: result.coverage,
     skipped_files: result.skipped,
     parser_schema_version: result.schemaVersion,
+    framework: result.framework,
+    routes: result.routes,
   }).eq("id", analysisId);
   throwIfError(error, "Could not store parser coverage");
 }
@@ -139,6 +142,8 @@ export async function prepareRepositoryAnalysis(repositoryUrl: string, rerun = f
       commit_sha: null,
       coverage: {},
       skipped_files: [],
+      framework: "generic",
+      routes: [],
       parser_schema_version: null,
       files_found: null,
       files_parsed: null,
@@ -220,7 +225,7 @@ export async function runAnalysisPipeline(analysisId: string): Promise<PipelineR
     await updateStage(supabase, analysisId, stage, "Parsing files and resolving imports.");
     const parsed = await parseRepository(fetched.directory);
     stage = "storing";
-    await updateStage(supabase, analysisId, stage, "Storing parsed files, dependencies, and coverage.");
+    await updateStage(supabase, analysisId, stage, "Storing parsed files, dependencies, framework roles, and routes.");
     await storeParseResult(supabase, orgId, analysisId, parsed);
     const { error: completeError } = await supabase.from("analyses").update({
       status: "completed",
@@ -244,6 +249,14 @@ export async function runAnalysisPipeline(analysisId: string): Promise<PipelineR
       stage_message: message,
       failed_stage: stage,
       error_message: message,
+      framework: "generic",
+      routes: [],
+      coverage: {},
+      skipped_files: [],
+      parser_schema_version: null,
+      files_found: null,
+      files_parsed: null,
+      files_skipped: null,
       ...(fetched ? { commit_sha: fetched.commitSha } : {}),
       completed_at: new Date().toISOString(),
     }).eq("id", analysisId);

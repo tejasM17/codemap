@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { CanvasPreviewShell } from "@/components/canvas-preview-shell";
 import { WorkspaceShell } from "@/components/workspace-shell";
-import { validateParseResult } from "@/lib/parser/validate";
+import { normalizeStoredParseResult } from "@/lib/parser/validate";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const instant = false;
@@ -26,8 +26,9 @@ export default async function AnalysisPage({ params }: PageProps<"/analysis/[ana
   if (analysis.status === "completed") {
     const { data: graph, error: graphError } = await supabase.rpc("get_analysis_graph", { p_analysis_id: analysis.id });
     if (graphError) throw new Error(`Could not load the stored dependency graph: ${graphError.message}`);
-    if (!validateParseResult(graph)) throw new Error("The stored analysis does not match the parser contract.");
-    return <CanvasPreviewShell analysis={graph} repositoryUrl={project.repository_url} repositoryName={project.name} commitSha={analysis.commit_sha} />;
+    const parsedGraph = normalizeStoredParseResult(graph);
+    if (!parsedGraph) throw new Error("The stored analysis does not match the parser contract.");
+    return <CanvasPreviewShell analysis={parsedGraph} repositoryUrl={project.repository_url} repositoryName={project.name} commitSha={analysis.commit_sha} />;
   }
 
   const startedAt = analysis.started_at ?? analysis.created_at;

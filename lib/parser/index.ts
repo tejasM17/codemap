@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import ts from "typescript";
-import { fallbackAdapter } from "./adapter.ts";
+import { parserAdapters } from "./adapters.ts";
 import type { DependencyEdge, EdgeKind, ImportCoverage, ParseResult, ParserAdapter, ParsedFile, SkippedFile } from "./types.ts";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"]);
@@ -145,14 +145,16 @@ function resolveImport(reference: ImportReference, from: string, root: string, c
   return { status: "internal", target: repoPath };
 }
 
-export async function parseRepository(directory: string, adapter: ParserAdapter = fallbackAdapter): Promise<ParseResult> {
+export async function parseRepository(directory: string, explicitAdapter?: ParserAdapter): Promise<ParseResult> {
   const root = resolve(directory);
+  const adapter = explicitAdapter ?? parserAdapters.find((candidate) => candidate.detect(root)) ?? parserAdapters[parserAdapters.length - 1];
   const excluded = new Set(adapter.excludeDirectories(root).map((path) => toPosix(path)));
   const discovered = await collectFiles(root, excluded);
   const skipped: SkippedFile[] = [];
   const parsedFiles: ParsedFile[] = [];
   const candidates = new Map<string, string>();
   const contentByFile = new Map<string, string>();
+  const sourceByPath = new Map<string, ts.SourceFile>();
 
   for (const absolutePath of discovered) {
     const path = toPosix(relative(root, absolutePath));
@@ -188,12 +190,14 @@ export async function parseRepository(directory: string, adapter: ParserAdapter 
     }
     candidates.set(resolve(absolutePath), path);
     contentByFile.set(absolutePath, content);
+    sourceByPath.set(path, source);
     parsedFiles.push({
       path,
       module: toPosix(dirname(relative(root, absolutePath))) === "." ? "." : toPosix(dirname(relative(root, absolutePath))),
       extension,
       lines: lineCount(content),
       hash: createHash("sha256").update(content).digest("hex"),
+      role: adapter.role(path, source),
       fanIn: 0,
       fanOut: 0,
       entryPointReason: adapter.entryPoint(path),
@@ -219,6 +223,10 @@ export async function parseRepository(directory: string, adapter: ParserAdapter 
   }
 
   const edges = [...edgeMap.values()];
+  const routes = adapter.routes(parsedFiles.flatMap((file) => {
+    const source = sourceByPath.get(file.path);
+    return source ? [{ path: file.path, source }] : [];
+  }));
   for (const edge of edges) {
     const sourceFile = filesByAbsolute.get(resolve(root, edge.from));
     const targetFile = filesByAbsolute.get(resolve(root, edge.to));
@@ -229,7 +237,9 @@ export async function parseRepository(directory: string, adapter: ParserAdapter 
   for (const entry of coverageImports) counts[entry.status] += 1;
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    framework: adapter.framework,
+    routes,
     root,
     filesFound: discovered.length,
     filesParsed: parsedFiles.length,
