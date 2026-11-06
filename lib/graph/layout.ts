@@ -22,7 +22,7 @@ const ROW_HEIGHT = 26;
 function dimensions(node: ModuleNode, openId: string | null): Pick<PositionedNode, "width" | "height" | "visibleFiles"> {
   const isOpen = node.id === openId;
   const width = isOpen
-    ? Math.min(340, Math.max(220, node.label.length * 8 + 44))
+    ? Math.min(560, Math.max(320, ...node.files.map((file) => file.path.length * 7 + 92)))
     : Math.min(260, Math.max(132, node.label.length * 8 + 34));
   const visibleFiles = node.id === openId && node.files.length <= MAX_VISIBLE_FILES ? node.files.length : 0;
   const overflowHeight = 8;

@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { ui } from "@clerk/ui";
 import { SetupRequired } from "@/components/setup-required";
 import { ThemeProvider } from "@/components/theme-provider";
 import "@xyflow/react/dist/style.css";
 import "./globals.css";
+
+// @clerk/ui currently resolves a newer compatible @clerk/shared minor than
+// @clerk/nextjs. The UI contract is runtime compatible, but TypeScript treats
+// the duplicated package types as unrelated.
+const clerkUi = ui as unknown as NonNullable<Parameters<typeof ClerkProvider>[0]["ui"]>;
 
 export const metadata: Metadata = {
   title: "CodeMap · See how your code fits together",
@@ -46,6 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
         {missingEnvironment.length > 0 ? <SetupRequired missing={missingEnvironment} /> : (
           <ClerkProvider
+            ui={clerkUi}
             signInUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL}
             signUpUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL}
           >

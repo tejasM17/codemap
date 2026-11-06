@@ -16,11 +16,12 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { RerunAnalysisButton } from "@/components/rerun-analysis-button";
 import { ThemeControl } from "@/components/theme-control";
 import { foldModules, type ModuleNode } from "@/lib/graph/fold";
 import { findGraphInsights, walkDependencyLevels, type WalkDirection } from "@/lib/graph/analysis";
 import { GRAPH_MAX_VISIBLE_FILES, layoutGraph } from "@/lib/graph/layout";
-import type { DependencyEdge, ParseResult, ParsedFile } from "@/lib/parser/types";
+import type { DependencyEdge, ParseResult } from "@/lib/parser/types";
 
 const extensionOrder = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
 
@@ -37,7 +38,6 @@ interface ModuleNodeData extends Record<string, unknown> {
   selectedModule: string | null;
   hoveredFile: string | null;
   relatedFiles: string[];
-  fileLabels: Record<string, string>;
   activeExtension: string | null;
   matchedFiles: number;
   onOpen: (id: string) => void;
@@ -53,25 +53,6 @@ interface DependencyEdgeData extends Record<string, unknown> {
 
 type CanvasNode = FlowNode<ModuleNodeData, "module">;
 type CanvasEdge = FlowEdge<DependencyEdgeData>;
-
-function shortFileLabels(files: ParsedFile[]): Record<string, string> {
-  const labels: Record<string, string> = {};
-  for (const file of files) {
-    const parts = file.path.split("/");
-    let label = parts.at(-1) ?? file.path;
-    for (let size = 2; size <= parts.length; size += 1) {
-      const suffix = parts.slice(-size).join("/");
-      const matches = files.filter((candidate) => candidate.path.split("/").slice(-size).join("/") === suffix);
-      if (matches.length === 1) {
-        label = suffix;
-        break;
-      }
-      label = suffix;
-    }
-    labels[file.path] = label;
-  }
-  return labels;
-}
 
 function fileEdgeTone(edge: DependencyEdge, selection: Selection | null, filesByModule: Map<string, Set<string>>): EdgeTone {
   if (!selection) return "quiet";
@@ -91,8 +72,9 @@ function fileHandleId(direction: "source" | "target", path: string): string {
 }
 
 function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
-  const { module, isOpen, isSelected, isDimmed, selectedFile, selectedModule, hoveredFile, relatedFiles, fileLabels, activeExtension, matchedFiles } = data;
+  const { module, isOpen, isSelected, isDimmed, selectedFile, selectedModule, hoveredFile, relatedFiles, activeExtension, matchedFiles } = data;
   const moduleFiles = module.files;
+  const summary = <><span>{module.files.length} files</span><span className="canvas-module__in">←{module.fanIn}</span><span className="canvas-module__out">{module.fanOut}→</span></>;
 
   useEffect(() => {
     if (!isOpen || !selectedFile) return;
@@ -113,13 +95,13 @@ function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
       {!isOpen ? (
         <button className="canvas-module__folded nodrag nopan" type="button" aria-expanded="false">
           <span className="canvas-module__name">{module.label}</span>
-          <span className="canvas-module__summary">{module.files.length} files{activeExtension ? ` · ${matchedFiles} match` : ""} · in {module.fanIn} · out {module.fanOut}</span>
+          <span className="canvas-module__summary">{summary}{activeExtension ? <span> · {matchedFiles} match</span> : null}</span>
         </button>
       ) : (
         <>
           <button className="canvas-module__header nodrag nopan" type="button" onClick={(event) => { event.stopPropagation(); data.onClose(); }} aria-expanded="true">
             <span className="canvas-module__name">{module.label}</span>
-            <span className="canvas-module__summary">{module.files.length} files{activeExtension ? ` · ${matchedFiles} match` : ""} · in {module.fanIn} · out {module.fanOut}</span>
+            <span className="canvas-module__summary">{summary}{activeExtension ? <span> · {matchedFiles} match</span> : null}</span>
           </button>
           <ul className={`canvas-module__files nowheel${module.files.length > GRAPH_MAX_VISIBLE_FILES ? " is-scrollable" : ""}`} aria-label={`${module.label} files`}>
             {moduleFiles.map((file) => {
@@ -140,7 +122,7 @@ function ModuleNodeView({ data }: NodeProps<CanvasNode>) {
                     onMouseLeave={() => data.onHover(null)}
                   >
                     <span className="canvas-file-dot" aria-hidden="true" />
-                    <span className="canvas-file-name">{fileLabels[file.path] ?? file.path}</span>
+                    <span className="canvas-file-name">{file.path}</span>
                     <span className="canvas-file-count" aria-label={`${file.fanIn} incoming, ${file.fanOut} outgoing dependencies`} title={`${file.fanIn} incoming · ${file.fanOut} outgoing`}>
                       <span aria-hidden="true">←{file.fanIn}</span>
                       <span aria-hidden="true">{file.fanOut}→</span>
@@ -205,7 +187,6 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
   }, [filesByModule, graph.edges, moduleByFile, selection]);
   const { activeNodes, relatedFiles } = selectionContext;
 
-  const fileLabels = useMemo(() => shortFileLabels(openId ? graph.nodes.find((node) => node.id === openId)?.files ?? [] : []), [graph.nodes, openId]);
   const nodes = useMemo<CanvasNode[]>(() => layout.nodes.map((positioned) => {
     const isOpen = positioned.id === openId;
     const hoverTouchesModule = hover?.kind === "module" ? hover.id === positioned.id : hover?.kind === "file" ? positioned.files.some((file) => file.path === hover.path) : true;
@@ -228,7 +209,6 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
         selectedModule: selection?.kind === "module" ? selection.id : null,
         hoveredFile: hover?.kind === "file" ? hover.path : null,
         relatedFiles: [...relatedFiles],
-        fileLabels,
         activeExtension,
         matchedFiles,
         onHover: setHover,
@@ -243,7 +223,7 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
       selectable: false,
       focusable: true,
     };
-  }), [activeExtension, activeNodes, fileLabels, hover, layout.nodes, openId, relatedFiles, selection]);
+  }), [activeExtension, activeNodes, hover, layout.nodes, openId, relatedFiles, selection]);
 
   const edges = useMemo<CanvasEdge[]>(() => {
     const groups = new Map<string, CanvasEdge>();
@@ -318,10 +298,6 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
     const rightIndex = extensionOrder.indexOf(right);
     return (leftIndex < 0 ? extensionOrder.length : leftIndex) - (rightIndex < 0 ? extensionOrder.length : rightIndex) || left.localeCompare(right);
   });
-  const repositoryImports = analysis.coverage.internal + analysis.coverage.failed;
-  const resolvedRatio = repositoryImports > 0 ? Math.floor((analysis.coverage.internal / repositoryImports) * 100) : 100;
-  const unresolvedImports = analysis.coverage.imports.filter((item) => item.status === "failed");
-  const isGraphPartial = unresolvedImports.length > 0 || analysis.coverage.excluded > 0;
   const dependentsByPath = new Map<string, string[]>();
   const dependenciesByPath = new Map<string, string[]>();
   for (const edge of analysis.edges) {
@@ -333,6 +309,7 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
     dependenciesByPath.set(edge.from, dependencies);
   }
   const repositoryName = analysis.root.split(/[\\/]/).filter(Boolean).at(-1) ?? analysis.root;
+  const frameworkName = analysis.files.some((file) => /^(app|pages)\//.test(file.path) || /^next\.config\.[^/]+$/.test(file.path)) ? "Next.js" : "none detected";
   const rankedDependents = [...dependentsByPath].sort((left, right) => right[1].length - left[1].length || left[0].localeCompare(right[0]));
   const mostDependedOn = rankedDependents.slice(0, 10);
   const allStartingFiles = analysis.files.filter((file) => !(dependentsByPath.get(file.path)?.length));
@@ -376,14 +353,6 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
         </ul>
       </aside>
       <main className="canvas-stage" aria-label="Repository dependency graph">
-        <div className="canvas-coverage" role="status">
-          <strong>{isGraphPartial ? "Graph is partial" : "Graph complete"}</strong>
-          <span>{analysis.coverage.internal} of {repositoryImports} imports into this repository resolved ({resolvedRatio}%)</span>
-          {analysis.coverage.excluded > 0 ? <span>{analysis.coverage.excluded} imports target non-source files</span> : null}
-          {unresolvedImports.map((item) => (
-            <code key={`${item.from}:${item.specifier}`}>{item.from} · {item.specifier} · {item.reason}</code>
-          ))}
-        </div>
         <ReactFlow<CanvasNode, CanvasEdge>
           className="canvas-flow"
           nodes={nodes}
@@ -421,12 +390,12 @@ function GraphCanvas({ analysis }: { analysis: ParseResult }) {
             <section className="details-file-section"><h3><span>Imports</span><strong className="details-out-count">{(dependenciesByPath.get(selectedFile.path) ?? []).length}→</strong></h3><ul className="details-path-list">{(dependenciesByPath.get(selectedFile.path) ?? []).map((path) => { const label = dependencyLabel(selectedFile.path, path); return <li key={path}>{paneFile(path)}{label ? <small>{label}</small> : null}</li>; })}</ul></section>
             <section className="details-file-section"><h3><span>Imported by</span><strong className="details-in-count">←{(dependentsByPath.get(selectedFile.path) ?? []).length}</strong></h3><ul className="details-path-list">{(dependentsByPath.get(selectedFile.path) ?? []).map((path) => { const label = dependencyLabel(path, selectedFile.path); return <li key={path}>{paneFile(path)}{label ? <small>{label}</small> : null}</li>; })}</ul></section>
           </> : <>
-            <div className="details-repository-head"><h2>{repositoryName}</h2><p>Framework <strong>none detected</strong></p></div>
+            <div className="details-repository-head"><h2>{repositoryName}</h2><p>Framework <strong>{frameworkName}</strong></p></div>
             <div className="details-metrics"><div><span>Files</span><strong>{analysis.filesParsed}</strong><small>{analysis.filesSkipped} skipped</small></div><div><span>Imports</span><strong>{analysis.coverage.internal + analysis.coverage.failed}</strong><small>{analysis.coverage.failed} unresolved</small></div><div><span>Routes</span><strong>—</strong><small>no adapter</small></div></div>
             <section className="details-ranking"><h3><span>Most depended on</span><small>by files importing it</small></h3><ul className="details-ranked-list">{mostDependedOn.map(([path, dependents]) => <li key={path}><span>{paneFile(path)}</span><strong className="details-in-count">←{dependents.length}</strong></li>)}</ul>{rankedDependents.length > mostDependedOn.length ? <p className="details-more">{rankedDependents.length - mostDependedOn.length} more not listed</p> : null}</section>
             <section className="details-ranking"><h3><span>Imported by nothing</span><small>where reading starts</small></h3><ul className="details-ranked-list">{startingFiles.map((file) => <li key={file.path}><span>{paneFile(file.path)}</span><strong className="details-out-count">{(dependenciesByPath.get(file.path) ?? []).length}→</strong></li>)}</ul>{allStartingFiles.length > startingFiles.length ? <p className="details-more">{allStartingFiles.length - startingFiles.length} more not listed</p> : null}</section>
             <section className="details-convention"><h3>Unidentified by convention <strong>{analysis.filesParsed}</strong></h3><p>No framework adapter applied, so no file was matched to a role.</p></section>
-            <section className="details-insights"><button type="button" aria-expanded={insightsOpen} onClick={() => setInsightsOpen(!insightsOpen)}><span>Insights</span><span>{insights.length} · {insightsOpen ? "−" : "+"}</span></button>{insightsOpen ? <div>{insightGroups.map(([kind, label]) => { const matches = insights.filter((insight) => insight.kind === kind); return <section key={kind}><h3>{label} <small>{matches.length}</small></h3>{matches.map((insight) => <div className="details-insight" key={`${kind}:${insight.path}`}><p>{insight.sentence}</p><div>{paneFile(insight.path)}{insight.relatedPaths?.map((path) => paneFile(path))}</div></div>)}</section>; })}</div> : null}</section>
+          <section className="details-insights"><button type="button" aria-expanded={insightsOpen} onClick={() => setInsightsOpen(!insightsOpen)}><span>Insights</span><span>{insights.length} · {insightsOpen ? "−" : "+"}</span></button>{insightsOpen ? <div>{insightGroups.map(([kind, label]) => { const matches = insights.filter((insight) => insight.kind === kind); return <section key={kind}><h3>{label} <small>{matches.length}</small></h3>{matches.map((insight) => <div className="details-insight" key={JSON.stringify([kind, insight.path, insight.relatedPaths ?? []])}><p>{insight.sentence}</p><div>{paneFile(insight.path)}{insight.relatedPaths?.map((path) => paneFile(path))}</div></div>)}</section>; })}</div> : null}</section>
           </>}
         </div>
       </aside>
@@ -442,18 +411,22 @@ function GraphView({ analysis }: { analysis: ParseResult }) {
   );
 }
 
-export function CanvasPreviewShell({ analysis }: { analysis: ParseResult }) {
+export function CanvasPreviewShell({ analysis, repositoryUrl, repositoryName, commitSha }: { analysis: ParseResult; repositoryUrl: string; repositoryName: string; commitSha: string | null }) {
+  let repositorySlug = repositoryName;
+  try {
+    repositorySlug = new URL(repositoryUrl).pathname.replace(/\.git$/, "").replace(/^\/+|\/+$/g, "") || repositoryName;
+  } catch {}
   return (
     <div className="canvas-preview">
       <header className="canvas-topbar">
-        <Link className="canvas-brand" href="/preview" aria-label="CodeMap preview">
+        <Link className="canvas-brand" href="/workspace" aria-label="CodeMap workspace">
           <span>CodeMap</span>
           <span className="canvas-topbar__slash" aria-hidden="true">/</span>
           <BrandMark />
         </Link>
         <OrganizationSwitcher
-          afterSelectOrganizationUrl="/preview"
-          afterCreateOrganizationUrl="/preview"
+          afterSelectOrganizationUrl="/workspace"
+          afterCreateOrganizationUrl="/workspace"
           hidePersonal
           appearance={{ elements: { rootBox: "canvas-org-switcher", organizationSwitcherTrigger: "canvas-org-trigger" } }}
         />
@@ -462,6 +435,11 @@ export function CanvasPreviewShell({ analysis }: { analysis: ParseResult }) {
           <UserButton />
         </div>
       </header>
+      <div className="canvas-repository-bar">
+        <span>{repositorySlug}</span>
+        {commitSha ? <code title={commitSha}>{commitSha.slice(0, 7)}</code> : null}
+        <RerunAnalysisButton repositoryUrl={repositoryUrl} />
+      </div>
       <div className="canvas-columns">
         <GraphView analysis={analysis} />
       </div>

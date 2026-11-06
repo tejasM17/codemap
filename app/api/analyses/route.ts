@@ -1,5 +1,5 @@
 import { RepositoryInputError } from "@/lib/pipeline/github";
-import { runRepositoryPipeline } from "@/lib/pipeline/run";
+import { prepareRepositoryAnalysis } from "@/lib/pipeline/run";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -14,7 +14,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runRepositoryPipeline(body.repositoryUrl);
+    const rerun = "rerun" in body && body.rerun === true;
+    const result = await prepareRepositoryAnalysis(body.repositoryUrl, rerun);
     return Response.json(result, { status: result.status === "existing" ? 200 : 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The repository could not be analysed.";

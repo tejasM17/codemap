@@ -1,13 +1,16 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { x as extractTar } from "tar";
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
+
+function archivePathIsWithin(root: string, candidate: string): boolean {
+  const destination = resolve(root, candidate);
+  const fromRoot = relative(root, destination);
+  return fromRoot === "" || (fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot));
+}
 
 export class RepositoryInputError extends Error {
   constructor(message: string) {
@@ -47,11 +50,12 @@ export function parseGitHubRepository(value: string): GitHubRepository {
 
   const owner = parts[0];
   const name = parts[1].replace(/\.git$/i, "");
+  const canonicalName = name.toLowerCase();
   if (!owner || !name || name === "." || name === "..") {
     throw new RepositoryInputError("Use a GitHub URL in the form https://github.com/owner/repository.");
   }
 
-  return { owner, name, canonicalUrl: `https://github.com/${owner.toLowerCase()}/${name.toLowerCase()}` };
+  return { owner, name, canonicalUrl: `https://github.com/${owner.toLowerCase()}/${canonicalName}` };
 }
 
 async function fetchBytes(url: string, accept: string): Promise<Uint8Array> {
@@ -92,8 +96,30 @@ export async function fetchGitHubRepository(repository: GitHubRepository): Promi
     const extractionPath = join(directory, "source");
     await mkdir(extractionPath);
     await writeFile(archivePath, archive);
-    // GitHub controls archive members; tar strips their single shared root below.
-    await execFileAsync("tar", ["--extract", "--gzip", "--file", archivePath, "--directory", extractionPath, "--strip-components=1", "--no-same-owner", "--no-same-permissions"]);
+    await extractTar({
+      file: archivePath,
+      cwd: extractionPath,
+      strip: 1,
+      preservePaths: false,
+      noMtime: true,
+      filter: (entryPath, entry) => {
+        if (!archivePathIsWithin(extractionPath, entryPath)) {
+          throw new Error("GitHub returned an archive containing a path outside the repository directory.");
+        }
+
+        if ("type" in entry && (entry.type === "SymbolicLink" || entry.type === "Link")) {
+          if (!entry.linkpath) throw new Error("GitHub returned an archive containing a link with no target.");
+          const linkTarget = entry.type === "SymbolicLink"
+            ? resolve(extractionPath, dirname(entryPath), entry.linkpath)
+            : resolve(extractionPath, entry.linkpath);
+          if (!archivePathIsWithin(extractionPath, linkTarget)) {
+            throw new Error(`GitHub returned an archive containing a ${entry.type === "SymbolicLink" ? "symbolic" : "hard"} link outside the repository directory.`);
+          }
+        }
+
+        return true;
+      },
+    });
     return {
       directory: extractionPath,
       commitSha,
@@ -101,7 +127,7 @@ export async function fetchGitHubRepository(repository: GitHubRepository): Promi
     };
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
-    if (error instanceof Error && error.message.includes("tar")) {
+    if (error instanceof Error && error.message.includes("archive")) {
       throw new Error("GitHub returned an archive that could not be unpacked.");
     }
     throw error;
