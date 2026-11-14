@@ -1,6 +1,13 @@
 export type EdgeKind = "import" | "re-export" | "dynamic-import";
 
 export type ImportResolutionStatus = "internal" | "external" | "excluded" | "failed";
+export type FrameworkId = "next" | "nestjs" | "react" | "generic";
+
+export interface ExtractedRoute {
+  method: string;
+  path: string;
+  file: string;
+}
 
 export interface ParsedFile {
   path: string;
@@ -8,8 +15,10 @@ export interface ParsedFile {
   extension: string;
   lines: number;
   hash: string;
+  role: string;
   fanIn: number;
   fanOut: number;
+  entryPointReason: string | null;
 }
 
 export interface DependencyEdge {
@@ -34,7 +43,9 @@ export interface SkippedFile {
 }
 
 export interface ParseResult {
-  schemaVersion: 1;
+  schemaVersion: 3;
+  framework: FrameworkId;
+  routes: ExtractedRoute[];
   root: string;
   filesFound: number;
   filesParsed: number;
@@ -54,6 +65,10 @@ export interface ParseResult {
 
 export interface ParserAdapter {
   name: string;
+  framework: FrameworkId;
   detect(root: string): boolean;
   excludeDirectories(root: string): string[];
+  entryPoint(path: string): string | null;
+  role(path: string, source: import("typescript").SourceFile): string;
+  routes(files: { path: string; source: import("typescript").SourceFile }[]): ExtractedRoute[];
 }
